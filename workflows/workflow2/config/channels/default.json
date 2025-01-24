@@ -1,0 +1,12 @@
+{
+    "voice_settings": {
+        "speaker_voice": "EN_Ivy_Female",
+        "language": "en",
+        "speed": 1
+    },
+    "video_settings": {
+        "preset_name": "1",
+        "overlay1_path": "assets/default_overlay1.png",
+        "overlay2_path": "assets/default_overlay2.png"
+    }
+}

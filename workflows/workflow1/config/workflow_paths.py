@@ -1,7 +1,7 @@
 import os
 import json
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 from common.config.base_paths import BasePathConfig
 
 class Workflow1Paths(BasePathConfig):
@@ -79,6 +79,18 @@ class Workflow1Paths(BasePathConfig):
         """Get path to preset file"""
         channel_paths = self.get_channel_paths(channel_name)
         return channel_paths["preset_file"]
+
+    def get_channels(self) -> List[str]:
+        """Get list of all channels"""
+        if not os.path.exists(self.ROOT_DIR):
+            return []
+            
+        channels = []
+        for item in os.listdir(self.ROOT_DIR):
+            if os.path.isdir(os.path.join(self.ROOT_DIR, item)) and not item.startswith('_'):
+                channels.append(item)
+                
+        return channels
 
     def setup_template_channel(self):
         """Setup template channel với cấu trúc và preset mẫu"""

@@ -108,3 +108,15 @@ class BasePathConfig:
             return False
             
         return True
+        
+    def get_channels(self) -> List[str]:
+        """Get list of all channels"""
+        if not os.path.exists(self.INPUT_DIR):
+            return []
+            
+        channels = []
+        for item in os.listdir(self.INPUT_DIR):
+            if os.path.isdir(os.path.join(self.INPUT_DIR, item)) and not item.startswith('_'):
+                channels.append(item)
+                
+        return channels

@@ -1,0 +1,23 @@
+{
+    "voice_settings": {
+        "speaker_voice": "EN_Ivy_Female",
+        "language": "en",
+        "speed": 1,
+        "temperature": 0.5,
+        "length_penalty": 1,
+        "repetition_penalty": 5,
+        "top_k": 50,
+        "top_p": 0.85
+    },
+    "paths": {
+        "overlay1": "assets/overlay1/YT_Infidelity_Stories/overlay1.png",
+        "overlay2_dir": "assets/overlay2/YT_Infidelity_Stories",
+        "overlay2_used_dir": "assets/videos/YT_Infidelity_Stories/videosl",
+        "audio_dir": "assets/audio/YT_Infidelity_Stories",
+        "subtitles_dir": "assets/subtitles/YT_Infidelity_Stories",
+        "videos_dir": "assets/videos/YT_Infidelity_Stories"
+    },
+    "video_settings": {
+        "preset_name": "1"
+    }
+}

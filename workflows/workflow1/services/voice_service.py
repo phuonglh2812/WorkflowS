@@ -1,7 +1,6 @@
 import os
 import json
 import httpx
-import uuid
 import shutil
 import time
 from typing import Dict, Optional
@@ -59,7 +58,9 @@ class VoiceService(BaseService):
             
             try:
                 # Generate session name
-                session_name = f"{script_name}_{uuid.uuid4().hex}"
+                script_name = os.path.splitext(os.path.basename(context.file_path))[0]
+                timestamp = str(int(time.time()))
+                session_name = f"{script_name}_{timestamp}"
                 self.logger.debug(f"Generated session name: {session_name}")
                 
                 # Load preset config
