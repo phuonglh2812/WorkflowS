@@ -1,0 +1,23 @@
+{
+    "voice_settings": {
+        "speaker_voice": "EN_Ivy_Female",
+        "language": "en",
+        "speed": 1,
+        "temperature": 0.75,
+        "length_penalty": 1,
+        "repetition_penalty": 5,
+        "top_k": 50,
+        "top_p": 0.85
+    },
+    "paths": {
+        "overlay1": "assets/overlay1/C1/overlay1.png",
+        "overlay2_dir": "assets/overlay2/C1",
+        "overlay2_used_dir": "assets/videos/C1/videosl",
+        "audio_dir": "assets/audio/C1",
+        "subtitles_dir": "assets/subtitles/C1",
+        "videos_dir": "assets/videos/C1"
+    },
+    "video_settings": {
+        "preset_name": "1"
+    }
+}

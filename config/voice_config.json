@@ -1,0 +1,21 @@
+{
+    "xtts_server_url": "http://localhost:8020",
+    "speaker_voice": "EN_Ivy_Female",
+    "language": "en",
+    "temperature": 0.75,
+    "length_penalty": 1,
+    "repetition_penalty": 5,
+    "top_k": 50,
+    "top_p": 0.85,
+    "speed": 1,
+    "stream_chunk_size": 200,
+    "enable_text_splitting": true,
+    "max_sentence_length": 100,
+    "enable_sentence_splitting": true,
+    "enable_sentence_appending": true,
+    "remove_diacritics": false,
+    "output_format": "wav",
+    "bitrate": "312k",
+    "appended_silence": 200,
+    "paragraph_silence": 200
+}

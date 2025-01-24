@@ -1,0 +1,8 @@
+{
+    "root_path": "D:/Test1/Workflow",
+    "api_urls": {
+        "voice_api": "http://localhost:5003",
+        "video_api": "http://localhost:5001",
+        "xtts_api": "http://localhost:5002"
+    }
+}

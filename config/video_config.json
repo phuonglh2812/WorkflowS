@@ -1,0 +1,8 @@
+{
+    "default_preset": "1",
+    "output_format": "mp4",
+    "default_overlays": {
+        "overlay1": "assets/default_overlay1.png",
+        "overlay2": "assets/default_overlay2.png"
+    }
+}
