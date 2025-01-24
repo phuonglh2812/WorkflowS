@@ -1,0 +1,16 @@
+{
+    "voice_settings": {
+        "speaker_voice": "EN_Ivy_Female",
+        "language": "en",
+        "speed": 1,
+        "temperature": 0.75,
+        "length_penalty": 1,
+        "repetition_penalty": 5,
+        "top_k": 50,
+        "top_p": 0.85,
+        "stream_chunk_size": 200,
+        "enable_text_splitting": true,
+        "max_sentence_length": 100,
+        "enable_sentence_splitting": true
+    }
+}

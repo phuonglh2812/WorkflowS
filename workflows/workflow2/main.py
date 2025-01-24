@@ -50,7 +50,7 @@ class Workflow2(BaseService):
             base_image = os.path.join(assets_dir, image_files[0])
             
             # Sử dụng đường dẫn tuyệt đối cho ThumbMaker.py
-            thumbmaker_path = Path("D:/Workflow1/ThumbMaker.py")
+            thumbmaker_path = Path("D:/AutomateWorkFlow/WorkflowFile/WorkflowS/ThumbMaker.py")
             working_dir = channel_paths["working_dir"]
             
             cmd = [

@@ -103,14 +103,11 @@ class VoiceService(BaseService):
             working_dir = str(channel_paths["working_dir"])
 
             wav_target = os.path.join(working_dir, f"{prefix}_hook.wav")
-            srt_target = os.path.join(working_dir, f"{prefix}_hook.srt")  # Giả sử tạo SRT
-            
+
             shutil.copy2(wav_source, wav_target)
-            shutil.copy2(os.path.join(pandrator_session, "final.srt"), srt_target)
 
             return {
-                'wav_file': wav_target,
-                'srt_file': srt_target
+                'wav_file': wav_target
             }
             
         except Exception as e:

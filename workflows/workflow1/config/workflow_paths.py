@@ -10,9 +10,10 @@ class Workflow1Paths(BasePathConfig):
         super().__init__(workflow_name="workflow1")
         
         # Khởi tạo các đường dẫn
-        self.ROOT_DIR = Path(os.getenv("WORKFLOW_ROOT", "D:/Test1/Workflow/Workflow1"))
-        self.PANDORA_DIR = Path(os.getenv("PANDORA_DIR", "E:/RedditWorkflow/Pandrator/Pandrator"))
-        self.VIDEO_DIR = Path(os.getenv("VIDEO_DIR", "D:/Test1"))
+        self.ROOT_DIR = Path(os.getenv("WORKFLOW_ROOT", "D:/AutomateWorkFlow/workflow1"))
+        self.PANDORA_DIR = Path(os.getenv("PANDORA_DIR", "D:/AutomateWorkFlow/WorkflowFile/Pandrator"))
+        self.VIDEO_DIR = Path(os.getenv("VIDEO_DIR", "D:/AutomateWorkFlow/WorkflowFile/VideoMakerS_Files"))
+        self.FINAL_DIR = Path(os.getenv("FINAL_DIR", "D:/AutomateWorkFlow/WorkflowFile/VideoMakerS_Files/final"))
         
         # Tạo template channel
         self.setup_template_channel()
@@ -40,7 +41,7 @@ class Workflow1Paths(BasePathConfig):
             "preset_file": channel_base / "preset.json",
             
             # Video service paths - final output
-            "video_final": self.VIDEO_DIR / "final"
+            "video_final": self.FINAL_DIR
         }
         
         # Tạo các thư mục nếu chưa tồn tại
@@ -100,18 +101,25 @@ class Workflow1Paths(BasePathConfig):
         # Tạo voice config
         voice_config = {
             "voice_settings": {
+                "xtts_server_url": "http://localhost:5002",
                 "speaker_voice": "EN_Ivy_Female",
                 "language": "en",
-                "speed": 1,
                 "temperature": 0.75,
                 "length_penalty": 1,
                 "repetition_penalty": 5,
                 "top_k": 50,
                 "top_p": 0.85,
+                "speed": 1,
                 "stream_chunk_size": 200,
                 "enable_text_splitting": True,
-                "max_sentence_length": 100,
-                "enable_sentence_splitting": True
+                "max_sentence_length": 60,
+                "enable_sentence_splitting": True,
+                "enable_sentence_appending": True,
+                "remove_diacritics": False,
+                "output_format": "wav",
+                "bitrate": "312k",
+                "appended_silence": 200,
+                "paragraph_silence": 200
             }
         }
         
@@ -121,6 +129,27 @@ class Workflow1Paths(BasePathConfig):
         video_preset = {
             "video_settings": {
                 "preset_name": "1"
+            },
+            "voice_settings": {
+                "xtts_server_url": "http://localhost:5002",
+                "speaker_voice": "EN_Ivy_Female",
+                "language": "en",
+                "temperature": 0.75,
+                "length_penalty": 1,
+                "repetition_penalty": 5,
+                "top_k": 50,
+                "top_p": 0.85,
+                "speed": 1,
+                "stream_chunk_size": 200,
+                "enable_text_splitting": True,
+                "max_sentence_length": 60,
+                "enable_sentence_splitting": True,
+                "enable_sentence_appending": True,
+                "remove_diacritics": False,
+                "output_format": "wav",
+                "bitrate": "312k",
+                "appended_silence": 200,
+                "paragraph_silence": 200
             }
         }
         
@@ -149,18 +178,25 @@ Copy toàn bộ thư mục này và đổi tên thành tên channel mới để 
 ```json
 {
     "voice_settings": {
+        "xtts_server_url": "http://localhost:5002",
         "speaker_voice": "EN_Ivy_Female",
         "language": "en",
-        "speed": 1,
         "temperature": 0.75,
         "length_penalty": 1,
         "repetition_penalty": 5,
         "top_k": 50,
         "top_p": 0.85,
+        "speed": 1,
         "stream_chunk_size": 200,
         "enable_text_splitting": true,
-        "max_sentence_length": 100,
-        "enable_sentence_splitting": true
+        "max_sentence_length": 60,
+        "enable_sentence_splitting": true,
+        "enable_sentence_appending": true,
+        "remove_diacritics": false,
+        "output_format": "wav",
+        "bitrate": "312k",
+        "appended_silence": 200,
+        "paragraph_silence": 200
     }
 }
 ```
@@ -170,6 +206,27 @@ Copy toàn bộ thư mục này và đổi tên thành tên channel mới để 
 {
     "video_settings": {
         "preset_name": "1"
+    },
+    "voice_settings": {
+        "xtts_server_url": "http://localhost:5002",
+        "speaker_voice": "EN_Ivy_Female",
+        "language": "en",
+        "temperature": 0.75,
+        "length_penalty": 1,
+        "repetition_penalty": 5,
+        "top_k": 50,
+        "top_p": 0.85,
+        "speed": 1,
+        "stream_chunk_size": 200,
+        "enable_text_splitting": true,
+        "max_sentence_length": 60,
+        "enable_sentence_splitting": true,
+        "enable_sentence_appending": true,
+        "remove_diacritics": false,
+        "output_format": "wav",
+        "bitrate": "312k",
+        "appended_silence": 200,
+        "paragraph_silence": 200
     }
 }
 ```
