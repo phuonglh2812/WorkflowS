@@ -13,6 +13,7 @@ from workflows.workflow1.workflow import Workflow1
 from workflows.workflow1.config.workflow_paths import Workflow1Paths
 from workflows.workflow1.services.workflow_watcher import Workflow1Watcher
 from workflows.workflow2.services.workflow_watcher import Workflow2Watcher
+from workflows.workflow3.services.workflow_watcher import Workflow3Watcher
 
 # Set up logging
 logging.basicConfig(
@@ -24,6 +25,10 @@ logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     try:
+        # Tạo event loop chung
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
         # Khởi tạo và chạy workflow1 watcher
         logger.info("Starting Workflow1 watcher...")
         workflow1_paths = Workflow1Paths()
@@ -36,13 +41,28 @@ if __name__ == "__main__":
         logger.info("Starting Workflow2 watcher...")
         workflow2_watcher = Workflow2Watcher()
         workflow2_watcher.start_all_channels()
-        workflow2_watcher.run_event_loop()
         logger.info("Workflow2 watcher started successfully")
         
-    except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt, stopping...")
-        workflow1_watcher.stop()
-        workflow2_watcher.stop()
+        # Khởi tạo và chạy workflow3 watcher
+        logger.info("Starting Workflow3 watcher...")
+        workflow3_watcher = Workflow3Watcher()
+        workflow3_watcher.start_all_channels()
+        logger.info("Workflow3 watcher started successfully")
+        
+        # Run event loop
+        try:
+            loop.run_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            # Cleanup
+            workflow1_watcher.stop()
+            workflow2_watcher.stop()
+            workflow3_watcher.stop()
+            
+            # Close event loop
+            loop.close()
+            
     except Exception as e:
-        logger.error(f"Error running workflow watchers: {str(e)}")
+        logger.error(f"Error in main: {str(e)}")
         raise

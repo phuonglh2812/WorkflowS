@@ -3,6 +3,7 @@
     "api_urls": {
         "voice_api": "http://localhost:5003",
         "video_api": "http://localhost:5001",
-        "xtts_api": "http://localhost:5002"
+        "xtts_api": "http://localhost:5002",
+        "whisper_api": "http://localhost:5004"
     }
 }

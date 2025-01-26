@@ -7,15 +7,15 @@ import asyncio
 import time
 from typing import Dict, Optional
 from common.utils.base_service import BaseService, WorkflowContext
-from ..config.workflow_paths import Workflow2Paths
+from ..config.workflow_paths import Workflow3Paths
 
 logger = logging.getLogger(__name__)
 
 class VideoService(BaseService):
-    def __init__(self, paths: Workflow2Paths):
+    def __init__(self, paths: Workflow3Paths):
         super().__init__()
         self.paths = paths
-        self.api_url = paths.api_urls["video_api"]
+        self.api_url = str(paths.api_urls["video_api"])
         
     def _move_files_to_final(self, working_dir: str, final_dir: str, prefix: str):
         """Di chuyển tất cả file của prefix từ working sang final"""
@@ -94,12 +94,6 @@ class VideoService(BaseService):
     async def process(self, context: WorkflowContext) -> Dict:
         """Process video với timeout 30 minutes"""
         try:
-            # Lấy kết quả từ voice service
-            if not hasattr(context, 'results') or 'VoiceService' not in context.results:
-                raise ValueError("Voice result not found in context")
-            
-            voice_result = context.results['VoiceService']
-            
             # Get channel paths và prefix
             channel_paths = self.paths.get_channel_paths(context.channel_name)
             working_dir = channel_paths["working_dir"]
@@ -123,10 +117,13 @@ class VideoService(BaseService):
                 'preset_name': preset_data['video_settings']['preset_name'],  # Lấy preset_name từ preset
             }
             
+            logger.info(f"Sending request to {self.api_url}/api/v1/hook/batch/9_16")
+            logger.info(f"Form data: {form}")
+            
             # Call video API with form-urlencoded
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{self.api_url}/api/v1/hook/batch/16_9",
+                    f"{self.api_url}/api/v1/hook/batch/9_16",
                     data=form,  # Sử dụng data thay vì json
                     headers={'Content-Type': 'application/x-www-form-urlencoded'},
                     timeout=1800
@@ -161,8 +158,12 @@ class VideoService(BaseService):
                         final_video_path = os.path.join(self.paths.VIDEO_DIR, "final", video_name)
                         logger.info(f"Final video path: {final_video_path}")
                         
+                        # Di chuyển video vào thư mục final của channel
+                        shutil.move(final_video_path, os.path.join(final_dir, video_name))
+                        logger.info(f"Moved final video to channel's final directory: {os.path.join(final_dir, video_name)}")
+                        
                         return {
-                            "video_path": final_video_path
+                            "video_path": os.path.join(final_dir, video_name)
                         }
                     elif status_data["status"] == "failed":
                         error_msg = f"Video generation failed: {status_data.get('error', 'Unknown error')}"
