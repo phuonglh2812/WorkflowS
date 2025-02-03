@@ -152,18 +152,20 @@ class VideoService(BaseService):
                         # Di chuyển các file script vào Completed
                         self._move_script_files(channel_paths, prefix, completed_dir)
                         
-                        # Tạo đường dẫn video theo format mặc định
-                        timestamp = str(int(time.time()))
-                        video_name = f"{prefix.lower()}_{timestamp}.mp4"
+                        # Lấy tên video từ output_paths của API
+                        if not status_data.get("output_paths"):
+                            raise Exception("No output video path in API response")
+                        video_name = os.path.basename(status_data["output_paths"][0])
                         final_video_path = os.path.join(self.paths.VIDEO_DIR, "final", video_name)
                         logger.info(f"Final video path: {final_video_path}")
                         
                         # Di chuyển video vào thư mục final của channel
-                        shutil.move(final_video_path, os.path.join(final_dir, video_name))
-                        logger.info(f"Moved final video to channel's final directory: {os.path.join(final_dir, video_name)}")
+                        channel_video_path = os.path.join(final_dir, video_name)
+                        shutil.move(final_video_path, channel_video_path)
+                        logger.info(f"Moved final video to channel's final directory: {channel_video_path}")
                         
                         return {
-                            "video_path": os.path.join(final_dir, video_name)
+                            "video_path": channel_video_path
                         }
                     elif status_data["status"] == "failed":
                         error_msg = f"Video generation failed: {status_data.get('error', 'Unknown error')}"

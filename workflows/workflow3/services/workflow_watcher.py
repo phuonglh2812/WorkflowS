@@ -117,6 +117,8 @@ class ScriptEventHandler(FileSystemEventHandler):
         self.processing_files: Set[str] = set()
         self.processing_prefixes: Set[str] = set()  # Track prefixes đang xử lý
         self.processing_lock = asyncio.Lock()  # Lock để tránh xử lý đồng thời
+        self.processing_queue = asyncio.Queue()  # Queue để xử lý theo thứ tự FIFO
+        self.processing_task = None  # Task xử lý queue
 
     def on_created(self, event):
         """Xử lý khi có file mới được tạo"""
@@ -187,7 +189,7 @@ class ScriptEventHandler(FileSystemEventHandler):
                 
                 if kb_file:
                     logger.info(f"Found KB file for {file_name}, processing pair...")
-                    self._process_file_pair_async(prefix, hook_file, kb_file)
+                    self._queue_file_pair(prefix, hook_file, kb_file)
                 else:
                     logger.info(f"Waiting for KB file for {file_name}...")
                     
@@ -198,7 +200,7 @@ class ScriptEventHandler(FileSystemEventHandler):
                 
                 if hook_file:
                     logger.info(f"Found hook file for {file_name}, processing pair...")
-                    self._process_file_pair_async(prefix, hook_file, kb_file)
+                    self._queue_file_pair(prefix, hook_file, kb_file)
                 else:
                     logger.info(f"Waiting for hook file for {file_name}...")
                     
@@ -208,6 +210,45 @@ class ScriptEventHandler(FileSystemEventHandler):
         finally:
             # Xóa khỏi danh sách đang xử lý
             self.processing_files.discard(file_path)
+
+    def _queue_file_pair(self, prefix: str, hook_file: str, kb_file: str):
+        """Thêm cặp file vào queue để xử lý theo thứ tự"""
+        try:
+            # Thêm cặp file vào queue
+            self.loop.call_soon_threadsafe(
+                self.processing_queue.put_nowait,
+                (prefix, hook_file, kb_file)
+            )
+            
+            # Khởi tạo task xử lý queue nếu chưa có
+            if not self.processing_task or self.processing_task.done():
+                self.processing_task = asyncio.run_coroutine_threadsafe(
+                    self._process_queue(),
+                    self.loop
+                )
+        except Exception as e:
+            logger.error(f"Error queueing file pair: {str(e)}")
+            
+    async def _process_queue(self):
+        """Xử lý các cặp file trong queue theo thứ tự FIFO"""
+        try:
+            while True:
+                # Lấy cặp file tiếp theo từ queue
+                prefix, hook_file, kb_file = await self.processing_queue.get()
+                
+                try:
+                    # Xử lý cặp file
+                    await self._process_file_pair(prefix, hook_file, kb_file)
+                except Exception as e:
+                    logger.error(f"Error processing file pair from queue: {str(e)}")
+                finally:
+                    # Đánh dấu task hoàn thành
+                    self.processing_queue.task_done()
+                    
+        except asyncio.CancelledError:
+            logger.info("Queue processing task cancelled")
+        except Exception as e:
+            logger.error(f"Error in queue processing loop: {str(e)}")
 
     async def _process_file_pair(self, prefix: str, hook_file: str, kb_file: str):
         """Xử lý cặp file hook và kb"""
