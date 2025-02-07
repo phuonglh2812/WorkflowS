@@ -34,22 +34,57 @@ class VoiceService(BaseService):
         )
         self.session.mount('http://', HTTPAdapter(max_retries=retries))
 
-    def _load_preset(self, channel_name: str) -> Optional[Dict]:
-        """Load preset config từ thư mục channel"""
-        channel_paths = self.paths.get_channel_paths(channel_name)
-        preset_path = channel_paths["preset_file"]
-
-        if not os.path.exists(preset_path):
-            logger.warning(f"Preset file not found at {preset_path}")
-            return None
-
+    def _load_preset(self, channel_name: str):
+        """
+        Load preset config from the specific channel directory
+        Uses the channel paths configuration to find the correct preset file
+        """
+        # Log the channel name and paths
+        logger.info(f"Attempting to load preset for channel: {channel_name}")
+        
         try:
+            # Get channel-specific paths
+            channel_paths = self.paths.get_channel_paths(channel_name)
+            logger.info(f"Channel paths: {channel_paths}")
+            
+            # Try to get preset file path from channel paths
+            preset_path = channel_paths.get("preset_file")
+            
+            # If preset_file is not in channel paths, construct potential paths
+            if not preset_path or not os.path.exists(preset_path):
+                # Potential alternative paths
+                potential_paths = [
+                    os.path.join(channel_paths.get("root_dir", ""), "preset.json"),
+                    os.path.join(channel_paths.get("root_dir", ""), f"{channel_name}_preset.json"),
+                    os.path.join('D:\\AutomateWorkFlow\\workflow3', channel_name, 'preset.json')
+                ]
+                
+                # Find the first existing path
+                for path in potential_paths:
+                    logger.info(f"Checking potential preset path: {path}")
+                    if os.path.exists(path):
+                        preset_path = path
+                        break
+            
+            # If no preset file found
+            if not preset_path or not os.path.exists(preset_path):
+                logger.warning(f"No preset file found for channel {channel_name}")
+                return None
+            
+            # Read and parse the preset file
+            logger.info(f"Reading preset from: {preset_path}")
             with open(preset_path, 'r', encoding='utf-8') as f:
                 preset = json.load(f)
-                logger.debug(f"Loaded preset from {preset_path}: {preset}")
-                return preset.get('voice_settings', {})
+                logger.info(f"Full preset contents: {json.dumps(preset, indent=2)}")
+                
+                # Extract whisper settings
+                whisper_settings = preset.get('whisper_settings', {})
+                logger.info(f"Extracted whisper_settings: {whisper_settings}")
+                
+                return whisper_settings
+        
         except Exception as e:
-            logger.error(f"Failed to load preset: {str(e)}")
+            logger.error(f"Error loading preset for channel {channel_name}: {str(e)}")
             return None
 
     async def _generate_tts(self, text_file: str, output_dir: str, output_filename: str, voice_config: Dict) -> str:
