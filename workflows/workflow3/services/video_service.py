@@ -5,6 +5,7 @@ import shutil
 import logging
 import asyncio
 import time
+import subprocess
 from typing import Dict, Optional
 from common.utils.base_service import BaseService, WorkflowContext
 from ..config.workflow_paths import Workflow3Paths

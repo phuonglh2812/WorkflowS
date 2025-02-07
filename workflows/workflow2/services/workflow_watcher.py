@@ -7,6 +7,7 @@ from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from typing import Dict, Optional, Set
+import shutil
 
 # Add root path to sys.path
 ROOT_PATH = str(Path(__file__).parent.parent.parent.parent)
@@ -31,7 +32,7 @@ class Workflow2Watcher:
             self.observers: Dict[str, Observer] = {}
             self.handlers: Dict[str, ScriptEventHandler] = {}
             
-            # Lấy event loop hiện tại hoặc tạo mới
+            # Lấy hoặc tạo event loop
             try:
                 self.loop = asyncio.get_event_loop()
             except RuntimeError:
@@ -49,10 +50,8 @@ class Workflow2Watcher:
             channel_paths = self.workflow.paths.get_channel_paths(channel_name)
             script_dir = channel_paths["scripts_dir"]
             
-            # Create observer for this channel
-            event_handler = ScriptEventHandler(self.workflow, channel_name)
-            event_handler.loop = self.loop  # Set event loop cho handler
-            
+            # Create handler and observer for this channel
+            event_handler = ScriptEventHandler(self.workflow, channel_name, self.loop)
             observer = Observer()
             observer.schedule(event_handler, script_dir, recursive=False)
             
@@ -82,6 +81,22 @@ class Workflow2Watcher:
             logger.error(f"Error starting all channels: {str(e)}")
             raise
             
+    def stop(self):
+        """Stop tất cả watchers"""
+        try:
+            # Stop tất cả observers
+            for observer in self.observers.values():
+                observer.stop()
+                observer.join()
+                
+            # Stop event loop nếu đang chạy
+            if self.loop and self.loop.is_running():
+                self.loop.stop()
+                
+        except Exception as e:
+            logger.error(f"Error stopping watchers: {str(e)}")
+            raise
+
     def run_event_loop(self):
         """Run event loop"""
         try:
@@ -91,30 +106,18 @@ class Workflow2Watcher:
             logger.error(f"Error running event loop: {str(e)}")
             raise
             
-    def stop(self):
-        """Stop tất cả watchers"""
-        try:
-            # Stop tất cả observers
-            for observer in self.observers.values():
-                observer.stop()
-                
-            # Wait for all observers to complete
-            for observer in self.observers.values():
-                observer.join()
-                
-            logger.info("All watchers stopped")
-            
-        except Exception as e:
-            logger.error(f"Error stopping watchers: {str(e)}")
-            raise
-
 class ScriptEventHandler(FileSystemEventHandler):
-    def __init__(self, workflow, channel_name: str):
+    def __init__(self, workflow, channel_name: str, loop: asyncio.AbstractEventLoop):
         self.workflow = workflow
         self.channel_name = channel_name
-        self.processing_prefixes: Set[str] = set()  # Track prefixes đang xử lý
-        self.processing_lock = asyncio.Lock()  # Lock để tránh xử lý đồng thời
-        self.loop = None  # Event loop sẽ được set sau
+        self.processing_lock = asyncio.Lock()
+        self.processing_queue = asyncio.Queue()
+        self.processing_task = None
+        self.processing_prefixes: Set[str] = set()
+        self.loop = loop
+        
+        # Sử dụng loop để tạo task
+        self.processing_task = self.loop.create_task(self._process_queue())
         
     def _get_file_prefix(self, file_path: str) -> str:
         """Lấy prefix từ tên file"""
@@ -126,97 +129,107 @@ class ScriptEventHandler(FileSystemEventHandler):
         script_dir = channel_paths["scripts_dir"]
         
         # Kiểm tra cả hook và kb file
-        hook_exists = os.path.exists(os.path.join(script_dir, f"{prefix}_Hook.txt"))
-        kb_exists = os.path.exists(os.path.join(script_dir, f"{prefix}_KB.txt"))
+        hook_files = [f for f in os.listdir(script_dir) if f.startswith(f"{prefix}_") and '_Hook.txt' in f]
+        kb_files = [f for f in os.listdir(script_dir) if f.startswith(f"{prefix}_") and '_KB.txt' in f]
         
-        return hook_exists and kb_exists
+        return bool(hook_files and kb_files)
         
-    async def _process_file_pair(self, prefix: str):
-        """Xử lý một cặp file hoàn chỉnh"""
-        try:
-            # Đánh dấu prefix đang xử lý
-            async with self.processing_lock:
-                if prefix in self.processing_prefixes:
-                    logger.info(f"Prefix {prefix} is already being processed")
-                    return
-                self.processing_prefixes.add(prefix)
-            
-            # Lấy cặp file
-            channel_paths = self.workflow.paths.get_channel_paths(self.channel_name)
-            script_dir = channel_paths["scripts_dir"]
-            
-            hook_file = os.path.join(script_dir, f"{prefix}_Hook.txt")
-            kb_file = os.path.join(script_dir, f"{prefix}_KB.txt")
-            # Ép sang str (nếu script_dir có thể là Path)
-            hook_file = str(hook_file)
-            kb_file = str(kb_file)
-            hook_context = WorkflowContext(
-                workflow_name="workflow2",
-                file_path=hook_file,
-                channel_name=self.channel_name
-            )
-            if os.path.exists(hook_file) and os.path.exists(kb_file):
-                # Xử lý hook file trước
-                hook_context = WorkflowContext(
-                    workflow_name="workflow2",
-                    file_path=hook_file,
-                    channel_name=self.channel_name
-                )
-                await self.workflow.process_hook(hook_context)
+    async def _process_queue(self):
+        """Xử lý queue theo thứ tự FIFO"""
+        while True:
+            try:
+                # Lấy file pair từ queue
+                prefix, hook_file, kb_file = await self.processing_queue.get()
                 
-                # Sau đó xử lý kb file
-                kb_context = WorkflowContext(
-                    workflow_name="workflow2",
-                    file_path=kb_file,
-                    channel_name=self.channel_name
-                )
-                await self.workflow.process(kb_context)
+                try:
+                    # Kiểm tra xem prefix này đã được xử lý chưa
+                    async with self.processing_lock:
+                        if prefix in self.processing_prefixes:
+                            logger.info(f"Prefix {prefix} is already being processed")
+                            continue
+                        self.processing_prefixes.add(prefix)
+                    
+                    # Xử lý hook file trước
+                    hook_context = WorkflowContext(
+                        workflow_name="workflow2",
+                        file_path=hook_file,
+                        channel_name=self.channel_name
+                    )
+                    await self.workflow.process_hook(hook_context)
+                    
+                    # Sau đó xử lý kb file
+                    kb_context = WorkflowContext(
+                        workflow_name="workflow2",
+                        file_path=kb_file,
+                        channel_name=self.channel_name
+                    )
+                    await self.workflow.process(kb_context)
+                    
+                    # Di chuyển file đã xử lý sang thư mục completed
+                    channel_paths = self.workflow.paths.get_channel_paths(self.channel_name)
+                    completed_dir = channel_paths["completed_dir"]
+                    
+                    # Di chuyển hook file
+                    hook_filename = os.path.basename(hook_file)
+                    shutil.move(
+                        hook_file, 
+                        os.path.join(completed_dir, hook_filename)
+                    )
+                    
+                    # Di chuyển kb file
+                    kb_filename = os.path.basename(kb_file)
+                    shutil.move(
+                        kb_file, 
+                        os.path.join(completed_dir, kb_filename)
+                    )
+                    
+                    logger.info(f"Processed file pair: {prefix}")
                 
-            # Xóa prefix khỏi danh sách đang xử lý
-            async with self.processing_lock:
-                self.processing_prefixes.remove(prefix)
-            
-        except Exception as e:
-            logger.error(f"Error processing file pair with prefix {prefix}: {str(e)}")
-            # Đảm bảo prefix được xóa khỏi danh sách trong mọi trường hợp
-            async with self.processing_lock:
-                self.processing_prefixes.discard(prefix)
-            
+                except Exception as e:
+                    logger.error(f"Error processing file pair {prefix}: {str(e)}")
+                
+                finally:
+                    # Luôn đảm bảo prefix được xóa khỏi danh sách
+                    async with self.processing_lock:
+                        self.processing_prefixes.discard(prefix)
+                    
+                    # Đánh dấu task trong queue đã hoàn thành
+                    self.processing_queue.task_done()
+                
+            except Exception as e:
+                logger.error(f"Error in queue processing: {str(e)}")
+                await asyncio.sleep(1)  # Tránh busy loop
+    
     def on_created(self, event):
-        """Handle file creation event"""
+        """Xử lý khi có file mới được tạo"""
         if event.is_directory:
             return
             
-        try:
-            file_path = event.src_path
-            logger.info(f"Processing new script in channel {self.channel_name}: {file_path}")
-            
-            # Đợi một chút để đảm bảo file đã được ghi xong
-            time.sleep(1)
-            
-            # Lấy prefix và kiểm tra cặp file
-            prefix = self._get_file_prefix(file_path)
-            
-            if self._is_pair_complete(prefix):
-                logger.info(f"Found complete pair for prefix {prefix}, processing...")
-                
-                # Sử dụng event loop từ Workflow2Watcher
-                if self.loop:
-                    asyncio.run_coroutine_threadsafe(
-                        self._process_file_pair(prefix),
-                        self.loop
-                    )
-                else:
-                    logger.error("Event loop not set in handler")
-                
-            else:
-                logger.info(f"Pair for prefix {prefix} is not complete yet, waiting for pair...")
-                
-        except Exception as e:
-            logger.error(f"Error processing script {file_path}: {str(e)}")
-            try:
-                # Di chuyển file lỗi vào error dir
-                error_file = os.path.join(self.workflow.paths.get_channel_paths(self.channel_name)["error_dir"], os.path.basename(file_path))
-                shutil.move(file_path, error_file)
-            except Exception as move_error:
-                logger.error(f"Error moving file to error dir: {str(move_error)}")
+        file_path = event.src_path
+        file_name = os.path.basename(file_path).lower()
+        
+        # Chỉ xử lý file txt
+        if not file_name.endswith('.txt'):
+            return
+        
+        # Lấy prefix
+        prefix = self._get_file_prefix(file_path)
+        
+        # Kiểm tra xem có đủ cặp file không
+        channel_paths = self.workflow.paths.get_channel_paths(self.channel_name)
+        script_dir = channel_paths["scripts_dir"]
+        
+        # Tìm hook và kb file
+        hook_files = [os.path.join(script_dir, f) for f in os.listdir(script_dir) 
+                      if f.startswith(f"{prefix}_") and '_Hook.txt' in f]
+        kb_files = [os.path.join(script_dir, f) for f in os.listdir(script_dir) 
+                    if f.startswith(f"{prefix}_") and '_KB.txt' in f]
+        
+        # Nếu có đủ cặp file, thêm vào queue
+        if hook_files and kb_files:
+            logger.info(f"Found complete pair for prefix {prefix}, adding to queue")
+            # Sử dụng run_coroutine_threadsafe để thêm vào queue
+            asyncio.run_coroutine_threadsafe(
+                self.processing_queue.put((prefix, hook_files[0], kb_files[0])), 
+                self.loop
+            )

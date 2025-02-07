@@ -1,8 +1,11 @@
 import os
 import json
+import logging
 from pathlib import Path
 from typing import Dict, List
 from common.config.base_paths import BasePathConfig
+
+logger = logging.getLogger(__name__)
 
 class Workflow3Paths(BasePathConfig):
     def __init__(self):
@@ -26,26 +29,43 @@ class Workflow3Paths(BasePathConfig):
                 self.WHISPER_SERVER_HOST = api_urls.get("whisper_server_host", "localhost")
                 self.WHISPER_SERVER_PORT = api_urls.get("whisper_server_port", 5004)
                 self.WHISPER_SERVER_URL = f"http://{self.WHISPER_SERVER_HOST}:{self.WHISPER_SERVER_PORT}"
-                self.WHISPER_API_TIMEOUT = api_urls.get("whisper_api_timeout", 1200)  # 20 minutes in seconds
+                self.WHISPER_API_TIMEOUT = api_urls.get("whisper_api_timeout", 1200)  # 20 minutes
                 
                 # TTS configuration
                 self.TTS_SERVER_HOST = api_urls.get("tts_server_host", "localhost")
                 self.TTS_SERVER_PORT = api_urls.get("tts_server_port", 5006)
                 self.TTS_SERVER_URL = f"http://{self.TTS_SERVER_HOST}:{self.TTS_SERVER_PORT}"
-                self.TTS_API_TIMEOUT = api_urls.get("tts_api_timeout", 1800)  # 30 minutes in seconds
+                self.TTS_API_TIMEOUT = api_urls.get("tts_api_timeout", 1800)  # 30 minutes
+                
+                # XTTS configuration
+                self.XTTS_SERVER_HOST = api_urls.get("xtts_server_host", "localhost")
+                self.XTTS_SERVER_PORT = api_urls.get("xtts_server_port", 5002)
+                self.XTTS_SERVER_URL = f"http://{self.XTTS_SERVER_HOST}:{self.XTTS_SERVER_PORT}"
+                
+                # Voice API configuration
+                self.VOICE_API_HOST = api_urls.get("voice_api_host", "localhost")
+                self.VOICE_API_PORT = api_urls.get("voice_api_port", 5003)
+                self.VOICE_API_URL = f"http://{self.VOICE_API_HOST}:{self.VOICE_API_PORT}"
         else:
-            # Default Whisper configuration
+            # Default configurations if config.json doesn't exist
             self.WHISPER_SERVER_HOST = "localhost"
             self.WHISPER_SERVER_PORT = 5004
             self.WHISPER_SERVER_URL = f"http://{self.WHISPER_SERVER_HOST}:{self.WHISPER_SERVER_PORT}"
-            self.WHISPER_API_TIMEOUT = 1200  # 20 minutes in seconds
+            self.WHISPER_API_TIMEOUT = 1200
             
-            # Default TTS configuration
             self.TTS_SERVER_HOST = "localhost"
             self.TTS_SERVER_PORT = 5006
             self.TTS_SERVER_URL = f"http://{self.TTS_SERVER_HOST}:{self.TTS_SERVER_PORT}"
-            self.TTS_API_TIMEOUT = 1800  # 30 minutes in seconds
-
+            self.TTS_API_TIMEOUT = 1800
+            
+            self.XTTS_SERVER_HOST = "localhost"
+            self.XTTS_SERVER_PORT = 5002
+            self.XTTS_SERVER_URL = f"http://{self.XTTS_SERVER_HOST}:{self.XTTS_SERVER_PORT}"
+            
+            self.VOICE_API_HOST = "localhost"
+            self.VOICE_API_PORT = 5003
+            self.VOICE_API_URL = f"http://{self.VOICE_API_HOST}:{self.VOICE_API_PORT}"
+        
         # Tự động tìm các channel
         self.CHANNELS = self.discover_channels()
         
@@ -82,7 +102,7 @@ class Workflow3Paths(BasePathConfig):
                 p.mkdir(parents=True, exist_ok=True)
         
         # Cuối cùng chuyển tất cả sang str trước khi trả về
-        return {key: str(path_obj) for key, path_obj in paths.items()}
+        return {k: str(v) for k, v in paths.items()}
 
     def get_preset_path(self, channel_name: str) -> str:
         """Get path (string) to preset file"""

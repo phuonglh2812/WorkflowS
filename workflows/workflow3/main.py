@@ -13,11 +13,21 @@ ROOT_PATH = str(Path(__file__).parent.parent.parent)
 if ROOT_PATH not in sys.path:
     sys.path.append(ROOT_PATH)
 
+logger = logging.getLogger(__name__)
+
+logger.info(f"Python executable: {sys.executable}")
+logger.info(f"Python version: {sys.version}")
+logger.info(f"Python path: {sys.path}")
+
+try:
+    import subprocess
+    logger.info("subprocess import successful")
+except Exception as e:
+    logger.error(f"Failed to import subprocess: {str(e)}")
+
 from .config.workflow_paths import Workflow3Paths
 from .services.voice_service import VoiceService
 from .services.video_service import VideoService
-
-logger = logging.getLogger(__name__)
 
 class Workflow3(BaseService):
     def __init__(self):

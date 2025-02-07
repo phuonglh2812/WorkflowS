@@ -34,10 +34,10 @@ class VoiceService(BaseService):
         )
         self.session.mount('http://', HTTPAdapter(max_retries=retries))
 
-    def _load_preset(self, channel_name: str) -> Optional[Dict]:
-        """Load preset config từ thư mục channel"""
-        channel_paths = self.paths.get_channel_paths(channel_name)
-        preset_path = channel_paths["preset_file"]
+    def _load_preset(self, channel_name: str):
+        """Load preset config from the specific channel directory"""
+        # Construct the path to the preset.json file in the channel directory
+        preset_path = os.path.join('D:\\AutomateWorkflow', 'workflow2', channel_name, 'preset.json')
 
         if not os.path.exists(preset_path):
             logger.warning(f"Preset file not found at {preset_path}")
@@ -49,7 +49,7 @@ class VoiceService(BaseService):
                 logger.debug(f"Loaded preset from {preset_path}: {preset}")
                 return preset.get('voice_settings', {})
         except Exception as e:
-            logger.error(f"Failed to load preset: {str(e)}")
+            logger.error(f"Failed to load preset for channel {channel_name}: {str(e)}")
             return None
 
     async def _generate_tts(self, text_file: str, output_dir: str, output_filename: str, voice_config: Dict) -> str:
@@ -99,11 +99,11 @@ class VoiceService(BaseService):
         for attempt in range(max_retries):
             try:
                 # Get channel config if available
-                channel_config = {}
+                whisper_settings = {}
                 if channel_name:
                     preset = self._load_preset(channel_name)
                     if preset:
-                        channel_config = preset.get('whisper_settings', {})
+                        whisper_settings = preset.get('whisper_settings', {})
 
                 # Prepare output directory and filename
                 output_dir = os.path.dirname(wav_file)
@@ -114,9 +114,11 @@ class VoiceService(BaseService):
                     "file_path": wav_file,
                     "output_path": output_dir,
                     "filename": filename,
-                    "words_per_segment": channel_config.get('words_per_segment', 2),
-                    "max_chars": channel_config.get('max_chars', 80)
+                    "words_per_segment": whisper_settings.get('words_per_segment', 2),
+                    "max_chars": whisper_settings.get('max_chars', 80)
                 }
+                
+                logger.info(f"Whisper SRT generation settings: {data}")  # Add logging to verify settings
 
                 # Call whisper API to generate SRT using session with retry
                 response = self.session.post(

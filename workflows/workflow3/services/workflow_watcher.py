@@ -3,6 +3,7 @@ import sys
 import time
 import json
 import logging
+import subprocess
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -33,8 +34,12 @@ class Workflow3Watcher:
             self.observers: Dict[str, Observer] = {}
             self.handlers: Dict[str, ScriptEventHandler] = {}
             
-            # Lấy event loop hiện tại 
-            self.loop = asyncio.get_event_loop()
+            # Lấy hoặc tạo event loop
+            try:
+                self.loop = asyncio.get_event_loop()
+            except RuntimeError:
+                self.loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self.loop)
                 
         except Exception as e:
             logger.error(f"Error initializing Workflow3Watcher: {str(e)}")

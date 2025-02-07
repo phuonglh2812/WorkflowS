@@ -99,11 +99,11 @@ class VoiceService(BaseService):
         for attempt in range(max_retries):
             try:
                 # Get channel config if available
-                channel_config = {}
+                whisper_settings = {}
                 if channel_name:
                     preset = self._load_preset(channel_name)
                     if preset:
-                        channel_config = preset.get('whisper_settings', {})
+                        whisper_settings = preset.get('whisper_settings', {})
 
                 # Prepare output directory and filename
                 output_dir = os.path.dirname(wav_file)
@@ -114,9 +114,11 @@ class VoiceService(BaseService):
                     "file_path": wav_file,
                     "output_path": output_dir,
                     "filename": filename,
-                    "words_per_segment": channel_config.get('words_per_segment', 2),
-                    "max_chars": channel_config.get('max_chars', 80)
+                    "words_per_segment": whisper_settings.get('words_per_segment', 2),
+                    "max_chars": whisper_settings.get('max_chars', 80)
                 }
+                
+                logger.info(f"Whisper SRT generation settings: {data}")  # Add logging to verify settings
 
                 # Call whisper API to generate SRT using session with retry
                 response = self.session.post(
