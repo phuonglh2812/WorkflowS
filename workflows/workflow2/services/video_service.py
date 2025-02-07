@@ -5,6 +5,8 @@ import shutil
 import logging
 import asyncio
 import time
+import subprocess
+import re
 from typing import Dict, Optional
 from common.utils.base_service import BaseService, WorkflowContext
 from ..config.workflow_paths import Workflow2Paths
@@ -91,6 +93,89 @@ class VideoService(BaseService):
             logger.error(f"Error handling error state: {str(e)}")
             raise
 
+    def _normalize_text(self, text: str) -> str:
+        """
+        Chuẩn hóa văn bản:
+        - Loại bỏ các ký tự đặc biệt
+        - Giữ lại chữ, số, khoảng trắng
+        - Giới hạn độ dài
+        """
+        import re
+        
+        # Loại bỏ các ký tự đặc biệt, giữ lại chữ, số, khoảng trắng
+        normalized = re.sub(r'[^a-zA-Z0-9\s]', '', text)
+        
+        # Loại bỏ multiple spaces
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+        
+        # Giới hạn độ dài (ví dụ: 200 ký tự)
+        return normalized[:200]
+
+    def _read_hook_content(self, hook_file: str) -> str:
+        """Đọc nội dung từ file hook"""
+        try:
+            with open(hook_file, 'r', encoding='utf-8') as f:
+                return f.read().strip()
+        except Exception as e:
+            logger.error(f"Error reading hook file: {str(e)}")
+            raise
+
+    def _update_video_metadata(self, video_file: str, hook_file: str, channel_name: str) -> None:
+        """Cập nhật metadata cho file video bằng FFmpeg"""
+        temp_file = None
+        try:
+            # Đọc nội dung hook file
+            content = self._read_hook_content(hook_file)
+            
+            # Lấy title từ dòng đầu tiên của hook content
+            title = content.split('\n')[0].strip()
+            
+            # Chuẩn hóa title và content
+            normalized_title = self._normalize_text(title)
+            normalized_content = self._normalize_text(content)
+            
+            # Tạo temporary file path
+            temp_file = video_file + ".temp.mp4"
+
+            # Các metadata cần thêm vào video
+            metadata_args = [
+                "-metadata", f"title={normalized_title}",
+                "-metadata", f"artist={channel_name}",
+                "-metadata", f"comment={normalized_content}",
+                "-metadata", f"description={normalized_content}",
+                "-metadata", f"genre={channel_name.lower()}",
+                "-metadata", "rating=5.0"
+            ]
+
+            # Lệnh FFmpeg để thêm metadata mà không làm thay đổi chất lượng video
+            ffmpeg_cmd = [
+                "ffmpeg", "-i", video_file,
+                "-map", "0", "-c", "copy"
+            ] + metadata_args + [temp_file]
+
+            # Thực thi lệnh FFmpeg
+            result = subprocess.run(
+                ffmpeg_cmd, 
+                capture_output=True, 
+                text=True,
+                check=True
+            )
+
+            # Thay thế file gốc bằng file mới có metadata
+            os.replace(temp_file, video_file)
+
+            logger.info(f"Updated metadata for video: {video_file}")
+
+        except Exception as e:
+            logger.error(f"Error updating video metadata: {str(e)}")
+            # Cleanup temp file if exists
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
+            raise
+
     async def process(self, context: WorkflowContext) -> Dict:
         """Process video với timeout 30 minutes"""
         try:
@@ -166,6 +251,11 @@ class VideoService(BaseService):
                         channel_video_path = os.path.join(final_dir, video_name)
                         shutil.move(final_video_path, channel_video_path)
                         logger.info(f"Moved final video to channel's final directory: {channel_video_path}")
+                        
+                        # Thêm metadata cho video
+                        hook_file = os.path.join(channel_paths["completed_dir"], f"{prefix}_Hook.txt")
+                        self._update_video_metadata(channel_video_path, hook_file, context.channel_name)
+                        logger.info(f"Added metadata for video: {channel_video_path}")
                         
                         return {
                             "video_path": channel_video_path

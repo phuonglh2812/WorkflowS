@@ -119,7 +119,7 @@ class VideoService(BaseService):
         return normalized[:200]
 
     def _update_video_metadata(self, video_file: str, hook_file: str, channel_name: str) -> None:
-        """Cập nhật metadata cho video file sử dụng Windows Shell"""
+        """Cập nhật metadata cho file video bằng FFmpeg"""
         temp_file = None
         try:
             # Đọc nội dung hook file
@@ -132,59 +132,38 @@ class VideoService(BaseService):
             normalized_title = self._normalize_text(title)
             normalized_content = self._normalize_text(content)
             
-            # Sử dụng PowerShell để cập nhật metadata
-            ps_script = f'''
-            $shell = New-Object -ComObject Shell.Application
-            $folder = $shell.Namespace((Split-Path "{video_file}"))
-            $file = $folder.ParseName((Split-Path "{video_file}" -Leaf))
-            
-            # Cập nhật các thuộc tính
-            $file.ExtendedProperty("Title") = "{normalized_title}"
-            $file.ExtendedProperty("Subject") = "{normalized_title}"
-            $file.ExtendedProperty("Comments") = "{normalized_content}"
-            $file.ExtendedProperty("Authors") = "{channel_name}"
-            $file.ExtendedProperty("Tags") = "{channel_name.lower()}"
-            $file.ExtendedProperty("Rating") = "5"
-            '''
-            
-            # Thực thi PowerShell script
-            import subprocess
-            result = subprocess.run(
-                ['powershell.exe', '-NoProfile', '-Command', ps_script],
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            
-            # Thêm metadata bằng ffmpeg để đảm bảo tương thích
+            # Tạo temporary file path
             temp_file = video_file + ".temp.mp4"
+
+            # Các metadata cần thêm vào video
             metadata_args = [
                 "-metadata", f"title={normalized_title}",
-                "-metadata", f"description={normalized_content}",
-                "-metadata", f"comment={normalized_content}",
                 "-metadata", f"artist={channel_name}",
-                "-metadata", f"album_artist={channel_name}",
+                "-metadata", f"comment={normalized_content}",
+                "-metadata", f"description={normalized_content}",
                 "-metadata", f"genre={channel_name.lower()}",
                 "-metadata", "rating=5.0"
             ]
-            
+
+            # Lệnh FFmpeg để thêm metadata mà không làm thay đổi chất lượng video
             ffmpeg_cmd = [
                 "ffmpeg", "-i", video_file,
-                "-c", "copy"
+                "-map", "0", "-c", "copy"
             ] + metadata_args + [temp_file]
-            
-            subprocess.run(
-                ffmpeg_cmd,
-                capture_output=True,
+
+            # Thực thi lệnh FFmpeg
+            result = subprocess.run(
+                ffmpeg_cmd, 
+                capture_output=True, 
                 text=True,
                 check=True
             )
-            
-            # Thay thế file gốc
+
+            # Thay thế file gốc bằng file mới có metadata
             os.replace(temp_file, video_file)
-            
+
             logger.info(f"Updated metadata for video: {video_file}")
-            
+
         except Exception as e:
             logger.error(f"Error updating video metadata: {str(e)}")
             # Cleanup temp file if exists
