@@ -4,13 +4,14 @@ import httpx
 import logging
 import time
 import shutil
-import asyncio
-import requests
 from typing import Dict, Optional
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 from common.utils.base_service import BaseService, WorkflowContext
 from ..config.workflow_paths import Workflow2Paths
+import subprocess
+import requests
+import asyncio
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +19,10 @@ class VoiceService(BaseService):
     def __init__(self, paths: Workflow2Paths):
         super().__init__()
         self.paths = paths
-        self.voice_api_url = paths.VOICE_API_URL
-        self.xtts_url = paths.XTTS_SERVER_URL
+        self.tts_url = paths.TTS_SERVER_URL
+        self.tts_timeout = paths.TTS_API_TIMEOUT
         self.whisper_url = paths.WHISPER_SERVER_URL
         self.whisper_timeout = paths.WHISPER_API_TIMEOUT
-        self.pandora_dir = str(paths.PANDORA_DIR)
         
         # Setup session with retry mechanism
         self.session = requests.Session()
@@ -47,51 +47,45 @@ class VoiceService(BaseService):
             with open(preset_path, 'r', encoding='utf-8') as f:
                 preset = json.load(f)
                 logger.debug(f"Loaded preset from {preset_path}: {preset}")
-                return preset
+                return preset.get('voice_settings', {})
         except Exception as e:
             logger.error(f"Failed to load preset: {str(e)}")
             return None
 
     async def _generate_tts(self, text_file: str, output_dir: str, output_filename: str, voice_config: Dict) -> str:
-        """Generate TTS using Pandrator API"""
+        """Generate TTS using new API endpoint"""
         try:
-            # Generate session name
-            script_name = os.path.splitext(os.path.basename(text_file))[0]
-            timestamp = str(int(time.time()))
-            session_name = f"{script_name}_{timestamp}"
+            # Prepare multipart form data
+            files = {
+                'file': ('input.txt', open(text_file, 'rb'), 'text/plain')
+            }
             
-            # Prepare request data
-            request_data = {
-                "source_file": str(text_file),
-                "session_name": session_name,
-                "xtts_server_url": self.xtts_url,
-                **voice_config
+            data = {
+                'voice': voice_config.get('voice', 'am_adam'),
+                'speed': voice_config.get('speed', '1'),
+                'output_dir': output_dir,
+                'output_filename': output_filename
             }
 
-            # Call voice API
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.voice_api_url}/process_with_pandrator",
-                    json=request_data,
-                    timeout=1800
-                )
-                response.raise_for_status()
+            # Call TTS API
+            response = requests.post(
+                f"{self.tts_url}/tts",
+                files=files,
+                data=data,
+                timeout=self.tts_timeout
+            )
+            response.raise_for_status()
             
-            logger.info("API call successful, waiting 10 seconds for files...")
-            time.sleep(10)
-            
-            # Get the generated wav file
-            pandrator_session = os.path.join(self.pandora_dir, "sessions", session_name)
-            wav_source = os.path.join(pandrator_session, "final.wav")
-            
-            if not os.path.exists(wav_source):
-                raise FileNotFoundError(f"Generated WAV file not found at {wav_source}")
-            
-            # Move to target location
-            wav_target = os.path.join(output_dir, output_filename)
-            shutil.copy2(wav_source, wav_target)
-            
-            return wav_target
+            # Parse response
+            result = response.json()
+            if result['status'] != 'success':
+                raise Exception(f"TTS API error: {result.get('message', 'Unknown error')}")
+                
+            wav_file = result['local_path']
+            if not os.path.exists(wav_file):
+                raise FileNotFoundError(f"Generated WAV file not found at {wav_file}")
+                
+            return wav_file
 
         except Exception as e:
             logger.error(f"Error generating TTS: {str(e)}")
@@ -157,6 +151,13 @@ class VoiceService(BaseService):
                 logger.error(f"Error generating SRT: {str(e)}")
                 raise
 
+    def _format_timestamp(self, seconds: float) -> str:
+        """Format seconds to SRT timestamp format (HH:MM:SS,mmm)"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        seconds = seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{seconds:06.3f}".replace('.', ',')
+
     async def process_hook(self, context: WorkflowContext) -> Dict:
         """Process hook file"""
         try:
@@ -174,12 +175,10 @@ class VoiceService(BaseService):
             working_dir = str(channel_paths["working_dir"])
             
             # Load voice config
-            preset = self._load_preset(context.channel_name)
-            if not preset:
+            voice_config = self._load_preset(context.channel_name)
+            if not voice_config:
                 logger.warning(f"No preset found for channel {context.channel_name}, using default config")
-                voice_config = {}
-            else:
-                voice_config = preset.get('voice_settings', {})
+                voice_config = {'voice': 'am_adam', 'speed': '1'}
             
             # Generate TTS
             wav_target = f"{prefix}_hook.wav" if '_Hook' in script_name else f"{prefix}_audio.wav"
@@ -190,7 +189,7 @@ class VoiceService(BaseService):
                 voice_config=voice_config
             )
             
-            # Only generate SRT for _KB files, not _hook files
+            # Only generate SRT for _audio files, not _hook files
             srt_file = None
             if '_KB' in script_name:  # Only for main audio files
                 with open(context.file_path, 'r', encoding='utf-8') as f:
@@ -207,5 +206,48 @@ class VoiceService(BaseService):
             raise
 
     async def process(self, context: WorkflowContext) -> Dict:
-        """Implement abstract method from BaseService"""
-        return await self.process_hook(context)
+        """Process KB file to generate voice and SRT"""
+        logger.info(f"Starting voice process for KB file: {context.file_path}")
+
+        try:
+            if not hasattr(context, 'results'):
+                context.results = {}
+            
+            # Get file paths
+            channel_paths = self.paths.get_channel_paths(context.channel_name)
+            working_dir = str(channel_paths["working_dir"])
+            script_name = os.path.splitext(os.path.basename(context.file_path))[0]
+            prefix = script_name.split('_KB')[0]
+
+            # Define target paths
+            wav_target = f"{prefix}_audio.wav"
+            srt_target = f"{prefix}.srt"
+
+            # Load voice config
+            voice_config = self._load_preset(context.channel_name)
+            if not voice_config:
+                logger.warning(f"No preset found for channel {context.channel_name}, using default config")
+                voice_config = {'voice': 'am_adam', 'speed': '1'}
+
+            # Generate TTS with final filename
+            wav_file = await self._generate_tts(
+                text_file=context.file_path,
+                output_dir=working_dir,
+                output_filename=wav_target,
+                voice_config=voice_config
+            )
+
+            # Generate SRT using whisper
+            with open(context.file_path, 'r', encoding='utf-8') as f:
+                text_content = f.read()
+            
+            srt_file = await self._generate_srt(wav_file, text_content, context.channel_name)
+
+            return {
+                'wav_file': wav_file,
+                'srt_file': srt_file
+            }
+            
+        except Exception as e:
+            logger.error(f"Error processing KB file: {str(e)}")
+            raise
