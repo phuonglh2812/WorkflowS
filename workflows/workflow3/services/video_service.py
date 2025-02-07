@@ -91,6 +91,110 @@ class VideoService(BaseService):
             logger.error(f"Error handling error state: {str(e)}")
             raise
 
+    def _read_hook_content(self, hook_file: str) -> str:
+        """Đọc nội dung từ file hook"""
+        try:
+            with open(hook_file, 'r', encoding='utf-8') as f:
+                return f.read().strip()
+        except Exception as e:
+            logger.error(f"Error reading hook file: {str(e)}")
+            raise
+
+    def _normalize_text(self, text: str) -> str:
+        """
+        Chuẩn hóa văn bản:
+        - Loại bỏ các ký tự đặc biệt
+        - Giữ lại chữ, số, khoảng trắng
+        - Giới hạn độ dài
+        """
+        import re
+        
+        # Loại bỏ các ký tự đặc biệt, giữ lại chữ, số, khoảng trắng
+        normalized = re.sub(r'[^a-zA-Z0-9\s]', '', text)
+        
+        # Loại bỏ multiple spaces
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+        
+        # Giới hạn độ dài (ví dụ: 200 ký tự)
+        return normalized[:200]
+
+    def _update_video_metadata(self, video_file: str, hook_file: str, channel_name: str) -> None:
+        """Cập nhật metadata cho video file sử dụng Windows Shell"""
+        temp_file = None
+        try:
+            # Đọc nội dung hook file
+            content = self._read_hook_content(hook_file)
+            
+            # Lấy title từ dòng đầu tiên của hook content
+            title = content.split('\n')[0].strip()
+            
+            # Chuẩn hóa title và content
+            normalized_title = self._normalize_text(title)
+            normalized_content = self._normalize_text(content)
+            
+            # Sử dụng PowerShell để cập nhật metadata
+            ps_script = f'''
+            $shell = New-Object -ComObject Shell.Application
+            $folder = $shell.Namespace((Split-Path "{video_file}"))
+            $file = $folder.ParseName((Split-Path "{video_file}" -Leaf))
+            
+            # Cập nhật các thuộc tính
+            $file.ExtendedProperty("Title") = "{normalized_title}"
+            $file.ExtendedProperty("Subject") = "{normalized_title}"
+            $file.ExtendedProperty("Comments") = "{normalized_content}"
+            $file.ExtendedProperty("Authors") = "{channel_name}"
+            $file.ExtendedProperty("Tags") = "{channel_name.lower()}"
+            $file.ExtendedProperty("Rating") = "5"
+            '''
+            
+            # Thực thi PowerShell script
+            import subprocess
+            result = subprocess.run(
+                ['powershell.exe', '-NoProfile', '-Command', ps_script],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            # Thêm metadata bằng ffmpeg để đảm bảo tương thích
+            temp_file = video_file + ".temp.mp4"
+            metadata_args = [
+                "-metadata", f"title={normalized_title}",
+                "-metadata", f"description={normalized_content}",
+                "-metadata", f"comment={normalized_content}",
+                "-metadata", f"artist={channel_name}",
+                "-metadata", f"album_artist={channel_name}",
+                "-metadata", f"genre={channel_name.lower()}",
+                "-metadata", "rating=5.0"
+            ]
+            
+            ffmpeg_cmd = [
+                "ffmpeg", "-i", video_file,
+                "-c", "copy"
+            ] + metadata_args + [temp_file]
+            
+            subprocess.run(
+                ffmpeg_cmd,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            # Thay thế file gốc
+            os.replace(temp_file, video_file)
+            
+            logger.info(f"Updated metadata for video: {video_file}")
+            
+        except Exception as e:
+            logger.error(f"Error updating video metadata: {str(e)}")
+            # Cleanup temp file if exists
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
+            raise
+
     async def process(self, context: WorkflowContext) -> Dict:
         """Process video với timeout 30 minutes"""
         try:
@@ -164,6 +268,11 @@ class VideoService(BaseService):
                         shutil.move(final_video_path, channel_video_path)
                         logger.info(f"Moved final video to channel's final directory: {channel_video_path}")
                         
+                        # Thêm metadata cho video - đọc từ thư mục Completed
+                        hook_file = os.path.join(channel_paths["completed_dir"], f"{prefix}_Hook.txt")
+                        self._update_video_metadata(channel_video_path, hook_file, context.channel_name)
+                        logger.info(f"Added metadata for video: {channel_video_path}")
+                        
                         return {
                             "video_path": channel_video_path
                         }
@@ -172,7 +281,7 @@ class VideoService(BaseService):
                         logger.error(error_msg)
                         # Xử lý lỗi và di chuyển file vào Error
                         self._handle_error(channel_paths, prefix, error_msg)
-                        raise Exception(error_msg)
+                        raise
                         
                     logger.info("Video still processing, waiting 15 minutes...")
                     await asyncio.sleep(900)  # Wait 15 minutes before next poll

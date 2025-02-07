@@ -21,15 +21,30 @@ class Workflow3Paths(BasePathConfig):
             with open(config_file, 'r') as f:
                 config = json.load(f)
                 api_urls = config.get("api_urls", {})
+                
+                # Whisper configuration
                 self.WHISPER_SERVER_HOST = api_urls.get("whisper_server_host", "localhost")
                 self.WHISPER_SERVER_PORT = api_urls.get("whisper_server_port", 5004)
                 self.WHISPER_SERVER_URL = f"http://{self.WHISPER_SERVER_HOST}:{self.WHISPER_SERVER_PORT}"
                 self.WHISPER_API_TIMEOUT = api_urls.get("whisper_api_timeout", 1200)  # 20 minutes in seconds
+                
+                # TTS configuration
+                self.TTS_SERVER_HOST = api_urls.get("tts_server_host", "localhost")
+                self.TTS_SERVER_PORT = api_urls.get("tts_server_port", 5006)
+                self.TTS_SERVER_URL = f"http://{self.TTS_SERVER_HOST}:{self.TTS_SERVER_PORT}"
+                self.TTS_API_TIMEOUT = api_urls.get("tts_api_timeout", 1800)  # 30 minutes in seconds
         else:
+            # Default Whisper configuration
             self.WHISPER_SERVER_HOST = "localhost"
             self.WHISPER_SERVER_PORT = 5004
             self.WHISPER_SERVER_URL = f"http://{self.WHISPER_SERVER_HOST}:{self.WHISPER_SERVER_PORT}"
             self.WHISPER_API_TIMEOUT = 1200  # 20 minutes in seconds
+            
+            # Default TTS configuration
+            self.TTS_SERVER_HOST = "localhost"
+            self.TTS_SERVER_PORT = 5006
+            self.TTS_SERVER_URL = f"http://{self.TTS_SERVER_HOST}:{self.TTS_SERVER_PORT}"
+            self.TTS_API_TIMEOUT = 1800  # 30 minutes in seconds
 
         # Tự động tìm các channel
         self.CHANNELS = self.discover_channels()

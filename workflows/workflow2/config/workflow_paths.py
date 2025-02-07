@@ -15,6 +15,54 @@ class Workflow2Paths(BasePathConfig):
         self.VIDEO_DIR = Path(os.getenv("VIDEO_DIR", "D:/AutomateWorkFlow/WorkflowFile/VideoMakerS_Files"))
         self.FINAL_DIR = Path(os.getenv("FINAL_DIR", "D:/AutomateWorkFlow/WorkflowFile/VideoMakerS_Files/final"))
 
+        # Load api_urls from config.json
+        config_file = self.ROOT_DIR / "config.json"
+        if config_file.exists():
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+                api_urls = config.get("api_urls", {})
+                
+                # Whisper configuration
+                self.WHISPER_SERVER_HOST = api_urls.get("whisper_server_host", "localhost")
+                self.WHISPER_SERVER_PORT = api_urls.get("whisper_server_port", 5004)
+                self.WHISPER_SERVER_URL = f"http://{self.WHISPER_SERVER_HOST}:{self.WHISPER_SERVER_PORT}"
+                self.WHISPER_API_TIMEOUT = api_urls.get("whisper_api_timeout", 1200)  # 20 minutes
+                
+                # TTS configuration
+                self.TTS_SERVER_HOST = api_urls.get("tts_server_host", "localhost")
+                self.TTS_SERVER_PORT = api_urls.get("tts_server_port", 5006)
+                self.TTS_SERVER_URL = f"http://{self.TTS_SERVER_HOST}:{self.TTS_SERVER_PORT}"
+                self.TTS_API_TIMEOUT = api_urls.get("tts_api_timeout", 1800)  # 30 minutes
+                
+                # XTTS configuration
+                self.XTTS_SERVER_HOST = api_urls.get("xtts_server_host", "localhost")
+                self.XTTS_SERVER_PORT = api_urls.get("xtts_server_port", 5002)
+                self.XTTS_SERVER_URL = f"http://{self.XTTS_SERVER_HOST}:{self.XTTS_SERVER_PORT}"
+                
+                # Voice API configuration
+                self.VOICE_API_HOST = api_urls.get("voice_api_host", "localhost")
+                self.VOICE_API_PORT = api_urls.get("voice_api_port", 5003)
+                self.VOICE_API_URL = f"http://{self.VOICE_API_HOST}:{self.VOICE_API_PORT}"
+        else:
+            # Default configurations if config.json doesn't exist
+            self.WHISPER_SERVER_HOST = "localhost"
+            self.WHISPER_SERVER_PORT = 5004
+            self.WHISPER_SERVER_URL = f"http://{self.WHISPER_SERVER_HOST}:{self.WHISPER_SERVER_PORT}"
+            self.WHISPER_API_TIMEOUT = 1200
+            
+            self.TTS_SERVER_HOST = "localhost"
+            self.TTS_SERVER_PORT = 5006
+            self.TTS_SERVER_URL = f"http://{self.TTS_SERVER_HOST}:{self.TTS_SERVER_PORT}"
+            self.TTS_API_TIMEOUT = 1800
+            
+            self.XTTS_SERVER_HOST = "localhost"
+            self.XTTS_SERVER_PORT = 5002
+            self.XTTS_SERVER_URL = f"http://{self.XTTS_SERVER_HOST}:{self.XTTS_SERVER_PORT}"
+            
+            self.VOICE_API_HOST = "localhost"
+            self.VOICE_API_PORT = 5003
+            self.VOICE_API_URL = f"http://{self.VOICE_API_HOST}:{self.VOICE_API_PORT}"
+        
         # Tự động tìm các channel
         self.CHANNELS = self.discover_channels()
         

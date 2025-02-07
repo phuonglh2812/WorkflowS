@@ -1,0 +1,10 @@
+{
+    "voice_settings": {
+        "voice": "am_adam",
+        "speed": "1"
+    },
+    "whisper_settings": {
+        "words_per_segment": 2,
+        "max_chars": 80
+    }
+}

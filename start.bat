@@ -2,7 +2,7 @@
 REM Script để tự động activate môi trường Conda và chạy main.py
 
 REM Kích hoạt Conda
-CALL conda activate "C:\Users\phuon\.conda\envs\xtts_api_server_installer"
+CALL conda activate workflow
 
 REM Chạy script Python
 python main.py
