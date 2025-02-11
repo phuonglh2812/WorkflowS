@@ -202,19 +202,33 @@ class VideoService(BaseService):
             with open(preset_file, 'r', encoding='utf-8') as f:
                 preset_data = json.load(f)
             
-            # Prepare form data
+            # Chuẩn bị form data
             form = {
                 'input_folder': working_dir,
-                'preset_name': preset_data['video_settings']['preset_name'],  # Lấy preset_name từ preset
+                # Lấy 'preset_name' từ preset
+                'preset_name': preset_data['video_settings']['preset_name']
             }
+
+            # Lấy bg_path từ context nếu có, nếu không thì lấy từ preset (nếu có)
+            bg_path = getattr(context, 'bg_path', None)
+            if not bg_path:
+                # fallback từ preset (nếu có)
+                bg_path = preset_data['video_settings'].get('bg_path')
             
-            # Call video API with form-urlencoded
+            # Nếu bg_path tồn tại => đưa vào form
+            if bg_path:
+                form['bg_path'] = bg_path
+
+            logger.info(f"Sending request to {self.api_url}/api/v1/hook/batch/16_9")
+            logger.info(f"Form data: {form}")
+            
+            # Gọi video API (form-urlencoded)
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.api_url}/api/v1/hook/batch/16_9",
-                    data=form,  # Sử dụng data thay vì json
+                    data=form,
                     headers={'Content-Type': 'application/x-www-form-urlencoded'},
-                    timeout=1800
+                    timeout=1800  # 30 phút
                 )
                 response.raise_for_status()
                 task_id = response.json()["task_id"]
@@ -224,10 +238,7 @@ class VideoService(BaseService):
                 while True:
                     status_url = f"{self.api_url}/api/v1/hook/status/{task_id}"
                     logger.info(f"Checking status at: {status_url}")
-                    status_response = await client.get(
-                        status_url,
-                        timeout=1800
-                    )
+                    status_response = await client.get(status_url, timeout=1800)
                     status_response.raise_for_status()
                     status_data = status_response.json()
                     logger.info(f"Status response: {status_data}")
@@ -237,8 +248,8 @@ class VideoService(BaseService):
                         # Di chuyển tất cả file của prefix sang final
                         self._move_files_to_final(working_dir, final_dir, prefix)
                         
-                        # Di chuyển các file script vào Completed
-                        self._move_script_files(channel_paths, prefix, completed_dir)
+                        # Di chuyển các file script vào Final
+                        self._move_script_files(channel_paths, prefix, final_dir)
                         
                         # Lấy tên video từ output_paths của API
                         if not status_data.get("output_paths"):
@@ -253,13 +264,12 @@ class VideoService(BaseService):
                         logger.info(f"Moved final video to channel's final directory: {channel_video_path}")
                         
                         # Thêm metadata cho video
-                        hook_file = os.path.join(channel_paths["completed_dir"], f"{prefix}_Hook.txt")
+                        hook_file = os.path.join(channel_paths["final_dir"], f"{prefix}_Hook.txt")
                         self._update_video_metadata(channel_video_path, hook_file, context.channel_name)
                         logger.info(f"Added metadata for video: {channel_video_path}")
                         
-                        return {
-                            "video_path": channel_video_path
-                        }
+                        return {"video_path": channel_video_path}
+                    
                     elif status_data["status"] == "failed":
                         error_msg = f"Video generation failed: {status_data.get('error', 'Unknown error')}"
                         logger.error(error_msg)
@@ -269,10 +279,11 @@ class VideoService(BaseService):
                         
                     logger.info("Video still processing, waiting 15 minutes...")
                     await asyncio.sleep(900)  # Wait 15 minutes before next poll
-                    
+
         except Exception as e:
             error_msg = f"Error processing video: {str(e)}"
             logger.error(error_msg)
             # Xử lý lỗi và di chuyển file vào Error
             self._handle_error(channel_paths, prefix, error_msg)
             raise
+

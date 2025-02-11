@@ -178,7 +178,7 @@ class VideoService(BaseService):
     async def process(self, context: WorkflowContext) -> Dict:
         """Process video với timeout 30 minutes"""
         try:
-            # Get channel paths và prefix
+            # Lấy channel_paths và prefix
             channel_paths = self.paths.get_channel_paths(context.channel_name)
             working_dir = channel_paths["working_dir"]
             final_dir = channel_paths["final_dir"]
@@ -187,56 +187,57 @@ class VideoService(BaseService):
             script_name = os.path.splitext(os.path.basename(context.file_path))[0]
             prefix = script_name.split('_KB')[0]
             
-            # Load preset từ file
+            # Load preset
             preset_file = self.paths.get_preset_path(context.channel_name)
             if not os.path.exists(preset_file):
                 raise FileNotFoundError(f"Preset file not found: {preset_file}")
-                
+            
             with open(preset_file, 'r', encoding='utf-8') as f:
                 preset_data = json.load(f)
-            
-            # Prepare form data
+
+            # Chuẩn bị form data
             form = {
                 'input_folder': working_dir,
-                'preset_name': preset_data['video_settings']['preset_name'],  # Lấy preset_name từ preset
+                'preset_name': preset_data['video_settings']['preset_name'],
             }
             
+            # Lấy bg_path từ context nếu có; nếu không, lấy từ preset (nếu có)
+            bg_path = getattr(context, 'bg_path', None)
+            if not bg_path:
+                # fallback vào preset
+                bg_path = preset_data['video_settings'].get('bg_path')
+
+            if bg_path:
+                form['bg_path'] = bg_path
+
             logger.info(f"Sending request to {self.api_url}/api/v1/hook/batch/9_16")
             logger.info(f"Form data: {form}")
             
-            # Call video API with form-urlencoded
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.api_url}/api/v1/hook/batch/9_16",
-                    data=form,  # Sử dụng data thay vì json
+                    data=form,
                     headers={'Content-Type': 'application/x-www-form-urlencoded'},
-                    timeout=1800
+                    timeout=1800  # 30 phút
                 )
                 response.raise_for_status()
                 task_id = response.json()["task_id"]
                 logger.info(f"Got task_id: {task_id}")
                 
-                # Poll for task completion
+                # Poll cho đến khi hoàn thành
                 while True:
                     status_url = f"{self.api_url}/api/v1/hook/status/{task_id}"
                     logger.info(f"Checking status at: {status_url}")
-                    status_response = await client.get(
-                        status_url,
-                        timeout=1800
-                    )
+                    status_response = await client.get(status_url, timeout=1800)
                     status_response.raise_for_status()
                     status_data = status_response.json()
                     logger.info(f"Status response: {status_data}")
                     
                     if status_data["status"] == "completed":
                         logger.info("Video processing completed, moving files to final")
-                        # Di chuyển tất cả file của prefix sang final
                         self._move_files_to_final(working_dir, final_dir, prefix)
+                        self._move_script_files(channel_paths, prefix, final_dir)
                         
-                        # Di chuyển các file script vào Completed
-                        self._move_script_files(channel_paths, prefix, completed_dir)
-                        
-                        # Lấy tên video từ output_paths của API
                         if not status_data.get("output_paths"):
                             raise Exception("No output video path in API response")
                         video_name = os.path.basename(status_data["output_paths"][0])
@@ -248,27 +249,24 @@ class VideoService(BaseService):
                         shutil.move(final_video_path, channel_video_path)
                         logger.info(f"Moved final video to channel's final directory: {channel_video_path}")
                         
-                        # Thêm metadata cho video - đọc từ thư mục Completed
-                        hook_file = os.path.join(channel_paths["completed_dir"], f"{prefix}_Hook.txt")
+                        # Thêm metadata
+                        hook_file = os.path.join(channel_paths["final_dir"], f"{prefix}_Hook.txt")
                         self._update_video_metadata(channel_video_path, hook_file, context.channel_name)
                         logger.info(f"Added metadata for video: {channel_video_path}")
                         
-                        return {
-                            "video_path": channel_video_path
-                        }
+                        return {"video_path": channel_video_path}
+                    
                     elif status_data["status"] == "failed":
                         error_msg = f"Video generation failed: {status_data.get('error', 'Unknown error')}"
                         logger.error(error_msg)
-                        # Xử lý lỗi và di chuyển file vào Error
                         self._handle_error(channel_paths, prefix, error_msg)
                         raise
-                        
-                    logger.info("Video still processing, waiting 15 minutes...")
-                    await asyncio.sleep(900)  # Wait 15 minutes before next poll
                     
+                    logger.info("Video still processing, waiting 15 minutes...")
+                    await asyncio.sleep(900)
+        
         except Exception as e:
             error_msg = f"Error processing video: {str(e)}"
             logger.error(error_msg)
-            # Xử lý lỗi và di chuyển file vào Error
             self._handle_error(channel_paths, prefix, error_msg)
             raise
